@@ -18,7 +18,7 @@ GreatCircleDistanceSquared(const Measurement& left,
 
 // Collect a nodeid set of a path location
 std::unordered_set<baldr::GraphId>
-collect_nodes(baldr::GraphReader& graphreader, const Candidate& location)
+collect_nodes(baldr::GraphReader& graphreader, const baldr::PathLocation& location)
 {
   std::unordered_set<baldr::GraphId> results;
   const baldr::GraphTile* tile = nullptr;
@@ -63,7 +63,7 @@ guess_source_result(const MapMatching::state_iterator source,
     const auto& c = source->candidate();
     //Note: technically a candidate can have correlated to more than one place in the graph
     //but the way its used in meili we only correlated it to one place so .front() is safe
-    return {c.edges.front().projected, c.distance(), last_valid_id, last_valid_type, source->id()};
+    return {c.edges.front().projected, c.edges.front().score, last_valid_id, last_valid_type, source->id()};
   } else if (source.IsValid()) {
     return {source_measurement.lnglat(), 0.f, baldr::GraphId(), GraphType::kUnknown, source->id()};
   }
@@ -93,7 +93,7 @@ guess_target_result(const MapMatching::state_iterator source,
     const auto& c = target->candidate();
     //Note: technically a candidate can have correlated to more than one place in the graph
     //but the way its used in meili we only correlated it to one place so .front() is safe
-    return {c.edges.front().projected, c.distance(), graphid, graphtype, target->id()};
+    return {c.edges.front().projected, c.edges.front().score, graphid, graphtype, target->id()};
   } else if (target.IsValid()) {
     return {target_measurement.lnglat(), 0.f, baldr::GraphId(), GraphType::kUnknown, target->id()};
   }
@@ -116,15 +116,15 @@ interpolate(baldr::GraphReader& reader,
   GraphType closest_graphtype = GraphType::kUnknown;
 
   for (auto candidate = begin; candidate != end; candidate++) {
-    if (candidate->sq_distance() < closest_sq_distance) {
-      //Note: technically a candidate can have correlated to more than one place in the graph
-      //but the way its used in meili we only correlated it to one place so .front() is safe
+    //Note: technically a candidate can have correlated to more than one place in the graph
+    //but the way its used in meili we only correlated it to one place so .front() is safe
+    if (candidate->edges.front().score < closest_sq_distance) {
       if (!candidate->edges.front().begin_node() && !candidate->edges.front().end_node()) {
         for (const auto& edge : candidate->edges) {
           const auto it = graphset.find(edge.id);
           if (it != graphset.end()) {
             closest_candidate = candidate;
-            closest_sq_distance = candidate->sq_distance();
+            closest_sq_distance = candidate->edges.front().score;
             closest_graphid = edge.id;
             closest_graphtype = GraphType::kEdge;
           }
@@ -134,7 +134,7 @@ interpolate(baldr::GraphReader& reader,
           const auto it = graphset.find(nodeid);
           if (it != graphset.end()) {
             closest_candidate = candidate;
-            closest_sq_distance = candidate->sq_distance();
+            closest_sq_distance = candidate->edges.front().score;
             closest_graphid = nodeid;
             closest_graphtype = GraphType::kNode;
           }
@@ -146,7 +146,7 @@ interpolate(baldr::GraphReader& reader,
   if (closest_candidate != end) {
     //Note: technically a candidate can have correlated to more than one place in the graph
     //but the way its used in meili we only correlated it to one place so .front() is safe
-    return {closest_candidate->edges.front().projected, closest_candidate->distance(), closest_graphid, closest_graphtype, kInvalidStateId};
+    return {closest_candidate->edges.front().projected, closest_candidate->edges.front().score, closest_graphid, closest_graphtype, kInvalidStateId};
   }
 
   return {measurement.lnglat()};
